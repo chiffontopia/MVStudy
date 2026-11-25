@@ -117,7 +117,7 @@ curl -s -o /dev/null -w "%{http_code}\n" \
 | `FILE_STORAGE_DIR` | 私有卷根目录；相对路径按**仓库根**解析 | `./var/files` |
 | `MAX_CONTENT_LENGTH` | **单个文件**的字节上限 | `524288`（512 KiB） |
 
-`var/` 已在 `.gitignore` 中忽略。multipart 的边界与头部另有开销，因此 Flask 的请求体上限自动放宽 64 KiB；精确校验在 `create_file()` 内按文件字节数完成，恰好等于上限的文件允许上传。
+`var/` 已在 `.gitignore` 中忽略。multipart 的边界与头部另有开销，因此 Flask 的请求体上限自动放宽 64 KiB；精确校验在 `create_file()` 内按文件字节数完成，恰好等于上限的文件允许上传。该放宽作用于 `create_app()` 的全部请求；需要严格 512 KiB 的 JSON 入口应在自身路由校验（7 号使用独立工厂，不受影响）。宿主同时把 413 统一为 `{"error":{"code":"payload_too_large","message":"…"}}`，其他域无需重复处理。
 
 **接口。**
 
