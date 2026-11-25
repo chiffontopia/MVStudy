@@ -1,7 +1,7 @@
-"""U1/U2/U5 与 F1 的 HTTP 面。
+"""U1–U5 与 F1 的 HTTP 面。
 
 路由只做三件事：解析入参、取当前身份、调用用例并映射响应。
-事务与授权判断都在 identity.py / classes.py / files.py 里，worker 与其他域复用同一份实现。
+事务与授权判断都在 identity.py / classes.py / admin.py / files.py 里，worker 与其他域复用同一份实现。
 
 当前身份由宿主在 before_request 注入 g.current_actor，结构同 U2 响应。
 """
@@ -12,6 +12,15 @@ from io import BytesIO
 
 from flask import Blueprint, current_app, g, jsonify, request, send_file
 
+from .admin import (
+    AdminError,
+    create_role,
+    create_user,
+    list_roles,
+    list_users,
+    update_role,
+    update_user,
+)
 from .classes import list_members
 from .files import (
     FileTooLarge,
@@ -133,3 +142,63 @@ def download_file(file_id: str):
         as_attachment=True,
         download_name=safe_name(row.name, row.file_id),
     )
+
+
+@platform_api.route("/admin/users", methods=["GET", "POST"])
+def admin_users_view():
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    session = _session()
+    try:
+        if request.method == "GET":
+            return jsonify({"items": list_users(session, actor)}), 200
+        return jsonify(create_user(session, actor, request.get_json(silent=True))), 201
+    except AdminError as error:
+        return _error(error.code, error.message, error.status)
+    finally:
+        session.close()
+
+
+@platform_api.patch("/admin/users/<user_id>")
+def admin_user_view(user_id: str):
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    session = _session()
+    try:
+        return jsonify(update_user(session, actor, user_id, request.get_json(silent=True)))
+    except AdminError as error:
+        return _error(error.code, error.message, error.status)
+    finally:
+        session.close()
+
+
+@platform_api.route("/admin/roles", methods=["GET", "POST"])
+def admin_roles_view():
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    session = _session()
+    try:
+        if request.method == "GET":
+            return jsonify({"items": list_roles(session, actor)}), 200
+        return jsonify(create_role(session, actor, request.get_json(silent=True))), 201
+    except AdminError as error:
+        return _error(error.code, error.message, error.status)
+    finally:
+        session.close()
+
+
+@platform_api.patch("/admin/roles/<role_id>")
+def admin_role_view(role_id: str):
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    session = _session()
+    try:
+        return jsonify(update_role(session, actor, role_id, request.get_json(silent=True)))
+    except AdminError as error:
+        return _error(error.code, error.message, error.status)
+    finally:
+        session.close()
