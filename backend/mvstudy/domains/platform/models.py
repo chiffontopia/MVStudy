@@ -1,11 +1,24 @@
-"""01 域身份与班级模型。字段、约束以 docs/database.md 为准。
+"""1 号域模型：身份、班级与受控文件。字段、约束以 docs/database.md 为准。
 
-四张表由本域独占写入：roles、users、classes、class_members。
+本域独占写入：roles、users、classes、class_members、files。
 """
 
 from __future__ import annotations
 
-from sqlalchemy import Boolean, CheckConstraint, ForeignKey, Index, Text, text
+from datetime import datetime
+
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Text,
+    UniqueConstraint,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -66,3 +79,26 @@ class ClassMember(Base):
         ForeignKey("users.user_id", name="fk_class_members_user"), primary_key=True
     )
     relation: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class File(Base):
+    """受控文件元信息；字节存放在私有卷，不在数据库。
+
+    ``file_id`` 面向调用方且不可变；``storage_key`` 只用于定位磁盘对象，
+    不对外暴露。新内容一律生成新行，不提供覆盖路径。
+    """
+
+    __tablename__ = "files"
+    __table_args__ = (UniqueConstraint("storage_key", name="uq_files_storage_key"),)
+
+    file_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    owner_id: Mapped[str] = mapped_column(
+        ForeignKey("users.user_id", name="fk_files_owner"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(Text, nullable=False)
+    media_type: Mapped[str] = mapped_column(Text, nullable=False)
+    byte_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    storage_key: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )

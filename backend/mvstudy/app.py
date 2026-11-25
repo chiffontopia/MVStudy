@@ -8,10 +8,10 @@ from __future__ import annotations
 
 import os
 
-from flask import Flask, g, request
+from flask import Flask, g, jsonify, request
 from flask_cors import CORS
 
-from .config import load_config
+from .config import MULTIPART_OVERHEAD_BYTES, load_config
 from .db import build_engine, build_session_factory
 from .domains.platform import load_current_actor
 from .domains.platform.routes import platform_api
@@ -26,7 +26,28 @@ def create_app(config: dict | None = None) -> Flask:
     app = Flask(__name__)
     app.config.update(load_config())
     app.config.update(config or {})
+    if "MAX_FILE_BYTES" in (config or {}):
+        # 测试或部署覆盖单文件上限时，请求体上限随之调整。
+        app.config["MAX_CONTENT_LENGTH"] = (
+            app.config["MAX_FILE_BYTES"] + MULTIPART_OVERHEAD_BYTES
+        )
+    elif "MAX_CONTENT_LENGTH" in (config or {}):
+        # 兼容旧写法：只传 MAX_CONTENT_LENGTH 时，按单文件上限解释。
+        app.config["MAX_FILE_BYTES"] = app.config["MAX_CONTENT_LENGTH"]
+        app.config["MAX_CONTENT_LENGTH"] = (
+            app.config["MAX_FILE_BYTES"] + MULTIPART_OVERHEAD_BYTES
+        )
     CORS(app, resources={r"/api/*": {"origins": app.config["WEB_ORIGIN"]}})
+
+    @app.errorhandler(413)
+    def payload_too_large(_error):
+        """Flask 在解析 multipart 时就会拦截超限请求，这里统一成契约错误结构。"""
+        return (
+            jsonify(
+                {"error": {"code": "payload_too_large", "message": "请求内容超过大小限制。"}}
+            ),
+            413,
+        )
 
     app.extensions["engine"] = build_engine(app.config["DATABASE_URL"])
     app.extensions["session_factory"] = build_session_factory(app.extensions["engine"])

@@ -1,16 +1,26 @@
-"""U1/U2/U5 的 HTTP 面。
+"""U1/U2/U5 与 F1 的 HTTP 面。
 
 路由只做三件事：解析入参、取当前身份、调用用例并映射响应。
-事务与授权判断都在 identity.py / classes.py 里，worker 与其他域复用同一份实现。
+事务与授权判断都在 identity.py / classes.py / files.py 里，worker 与其他域复用同一份实现。
 
 当前身份由宿主在 before_request 注入 g.current_actor，结构同 U2 响应。
 """
 
 from __future__ import annotations
 
-from flask import Blueprint, current_app, g, jsonify, request
+from io import BytesIO
+
+from flask import Blueprint, current_app, g, jsonify, request, send_file
 
 from .classes import list_members
+from .files import (
+    FileTooLarge,
+    InvalidFile,
+    create_file,
+    file_meta,
+    read_file,
+    safe_name,
+)
 from .identity import AuthError, login as login_use_case
 
 platform_api = Blueprint("platform", __name__, url_prefix="/api")
@@ -75,3 +85,51 @@ def members_view(class_id: str):
     if items is None:
         return _error("not_found", "班级不存在或不在可读范围。", 404)
     return jsonify({"items": items})
+
+
+@platform_api.post("/files")
+def upload_file():
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    upload = request.files.get("file")
+    if upload is None or not (upload.filename or "").strip():
+        return _error("invalid_files", "请选择要上传的文件。", 400)
+    data = upload.read()
+    session = _session()
+    try:
+        row = create_file(
+            session,
+            actor,
+            name=upload.filename,
+            media_type=upload.mimetype,
+            data=data,
+        )
+    except FileTooLarge as error:
+        return _error(error.code, error.message, error.status)
+    except InvalidFile as error:
+        return _error(error.code, error.message, error.status)
+    finally:
+        session.close()
+    return jsonify(file_meta(row)), 201
+
+
+@platform_api.get("/files/<file_id>")
+def download_file(file_id: str):
+    actor = _actor()
+    if actor is None:
+        return _error("unauthenticated", "请先登录。", 401)
+    session = _session()
+    try:
+        result = read_file(session, actor, file_id)
+    finally:
+        session.close()
+    if result is None:
+        return _error("not_found", "文件不存在或不在可读范围。", 404)
+    row, data = result
+    return send_file(
+        BytesIO(data),
+        mimetype=row.media_type,
+        as_attachment=True,
+        download_name=safe_name(row.name, row.file_id),
+    )
