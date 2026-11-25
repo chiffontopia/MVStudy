@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
 import { currentActor, roleLabel, signOut } from "./session";
 
 const router = useRouter();
 const actor = computed(() => currentActor.value);
+const canManageUsers = computed(() => actor.value?.permissions.includes("admin.users") ?? false);
+const canManageRoles = computed(() => actor.value?.permissions.includes("admin.roles") ?? false);
 
 function handleSignOut(): void {
   signOut();
@@ -38,6 +40,14 @@ function handleSignOut(): void {
         <li v-for="code in actor.permissions" :key="code">{{ code }}</li>
       </ul>
       <p v-else class="empty">暂无授权</p>
+    </section>
+
+    <section v-if="canManageUsers || canManageRoles" class="card">
+      <h2>管理入口</h2>
+      <div class="links">
+        <RouterLink v-if="canManageUsers" to="/admin/users">用户管理</RouterLink>
+        <RouterLink v-if="canManageRoles" to="/admin/roles">角色权限</RouterLink>
+      </div>
     </section>
 
     <p class="note">
@@ -100,6 +110,22 @@ ul {
   margin: 0;
   color: #98a2b3;
   font-size: 13px;
+}
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.links a {
+  padding: 8px 14px;
+  border: 1px solid #d0d5dd;
+  border-radius: 6px;
+  color: #1d4ed8;
+  font-size: 13px;
+  text-decoration: none;
+}
+.links a:hover {
+  background: #eff4ff;
 }
 .note {
   margin: 20px 0 0;
