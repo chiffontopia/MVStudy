@@ -11,7 +11,7 @@
 - [x] 上传后刷新仍可读出相同字节；同名再上传产生不同 file_id。
 - [x] 其他学生读取未授权文件返回 404；非法内容或超限失败后无可访问的半成品。
 
-**验收证据：** 分支 `feat/task-11-files`，已 rebase 到 `origin/main` 的 `d7c50d5`。实现提交 `deb4c6d`（F1 与迁移）、`a5020cc`（验收与升级测试）、`3f85d88`（运行说明与限额）。迁移 `migrations/versions/0002_platform_files.py`（`files` 表，`storage_key` 唯一，`owner_id` 外键）；用例 `platform/files.py`、私有卷 `platform/storage.py`、路由 `platform/routes.py`。`python -m pytest tests/test_platform_files.py -q`：16 passed；`python -m pytest tests -q`：30 passed；`python tools/check_layout.py`：通过；`python -m alembic heads`：`0002_platform_files (head)` 单头；`python -m alembic check`：无差异；`pyflakes backend/mvstudy/domains/platform/ tests/test_platform_files.py`：无告警。
+**验收证据：** 分支 `feat/task-11-files`，已 rebase 到 `origin/main` 的 `d7c50d5`。实现提交 `deb4c6d`（F1 与迁移）、`a5020cc`（验收与升级测试）、`3f85d88`、`04310a6`（运行说明、限额与宿主 413 行为）。迁移 `migrations/versions/0002_platform_files.py`（`files` 表，`storage_key` 唯一，`owner_id` 外键）；用例 `platform/files.py`、私有卷 `platform/storage.py`、路由 `platform/routes.py`。`python -m pytest tests/test_platform_files.py -q`：16 passed；`python -m pytest tests -q`：30 passed；`python tools/check_layout.py`：通过；`python -m alembic heads`：`0002_platform_files (head)` 单头；`python -m alembic check`：无差异；`pyflakes backend/mvstudy/domains/platform/ tests/test_platform_files.py`：无告警。
 
 测试覆盖：上传后二次请求取回相同字节、同名再传编号不同、重复 upgrade 后文件仍可读、**从 `0001_platform_identity` 升级到 `0002_platform_files` 后原用户数不变且原账号仍可登录**、他人读 404、未知编号 404、元信息在而对象缺失按 404、非法 `storage_key` 拒绝路径穿越、未登录 401、缺 `file` 字段 400、恰好等于上限可传、超一字节 413、请求体级超限也返回 JSON 413、失败后表与磁盘零残留、NUL 文件名在入库前拒绝、非法媒体类型退回通用类型、内部 `create_file`/`read_bytes` 同进程可用、每个方法与路径唯一处理器。
 
