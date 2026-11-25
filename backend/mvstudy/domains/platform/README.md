@@ -1,6 +1,6 @@
-# 平台基础：身份、权限、班级与受控文件（01、11 号票）
+# 平台基础：身份、权限、班级与受控文件（01、10、11 号票）
 
-本域提供 U1 登录、U2 当前身份、U5 班级名册、F1 受控文件，并交付全平台共用的应用工厂、Alembic 迁移入口与幂等开发种子。U3/U4 归 10 号票，P1 归 32 号票。
+本域提供 U1 登录、U2 当前身份、U3/U4 管理接口、U5 班级名册、F1 受控文件，并交付全平台共用的应用工厂、Alembic 迁移入口与幂等开发种子。P1 归 32 号票。
 
 ## 前置条件
 
@@ -51,6 +51,7 @@ python -m mvstudy.domains.platform.seed
 
 ```bash
 python -m pytest tests/test_platform_integration.py -q   # 01：登录、身份、班级
+python -m pytest tests/test_platform_admin.py -q         # 10：启停账号与角色权限
 python -m pytest tests/test_platform_files.py -q         # 11：F1 文件与 0001→0002 升级
 ```
 
@@ -176,6 +177,43 @@ printf 'hello mvstudy\n' > /tmp/t.txt
 # 6) 同名再传，file_id 应不同
 ```
 
+## 管理接口（U3/U4）
+
+仅管理员可用：角色为 `admin` 且分别持有 `admin.users` / `admin.roles`。判断集中在 `admin.py::_require()`；前端路由守卫只决定页面能否打开，后端仍会对直接请求返回 403。
+
+| 方法 · 路径 | 输入 | 成功 | 失败 |
+|---|---|---|---|
+| GET `/api/admin/users` | 无 | `{"items":[{user_id,login,display_name,role_id,enabled}]}` | 401 `unauthenticated`；403 `forbidden` |
+| POST `/api/admin/users` | `login/display_name/password/role_id` | 201 单个用户 | 400 `invalid_params`；409 `login_taken` |
+| PATCH `/api/admin/users/{user_id}` | 只接受 `display_name/role_id/enabled` | 200 单个用户 | 400 `invalid_params`；404 `not_found` |
+| GET `/api/admin/roles` | 无 | `{"items":[{role_id,name,permissions}]}` | 401/403 |
+| POST `/api/admin/roles` | `role_id/name/permissions` | 201 单个角色 | 400 `invalid_permission`；409 `role_exists` |
+| PATCH `/api/admin/roles/{role_id}` | 只接受 `name/permissions` | 200 单个角色 | 400 `invalid_permission`；404 `not_found` |
+
+固定规则：
+
+- PATCH 只更新请求体里出现的键；出现不可写键（如 `password`）直接 400，不做静默忽略。
+- 不能停用当前登录的管理员账号；不能从自己所属角色移除 `admin.roles`。两条都是防自锁。
+- 账号响应不含 `password_hash`；新用户 `user_id` 由服务端生成（`u-` + 8 位十六进制）。
+- 停用账号或改动权限后无需额外操作：JWT 只带 `user_id`，下一次请求由 `load_current_actor()` 重新读库，因此旧凭证立即失效。
+
+### 权限码白名单
+
+`permissions.py` 是唯一取值域，U4 以 `invalid_permission` 拒绝未登记的码。新增码的前提是某个域真的在入口检查它，否则管理页的说明只是装饰。
+
+| 权限码 | 含义 |
+|---|---|
+| `case.read` | 查看案例、材料与算法目录 |
+| `case.write` | 维护案例与材料版本 |
+| `run.create` | 提交算法运行 |
+| `submission.write` | 提交作业版本 |
+| `grade.write` | 批改作业与写入成绩 |
+| `analytics.read` | 读取班级学情与周报 |
+| `admin.users` | 管理用户：列表、新建、启停 |
+| `admin.roles` | 管理角色与权限 |
+
+管理页的中文说明在 `frontend/src/features/platform/permission-notes.ts`；新增权限码时两边同时登记。
+
 ## 给其他域的装配边界
 
 **`g.current_actor`** 由宿主 `create_app()` 在每个请求注入，结构逐字等同 U2 响应：
@@ -207,4 +245,4 @@ printf 'hello mvstudy\n' > /tmp/t.txt
 
 ## 本票边界
 
-不含：用户启停与角色权限维护（U3/U4，10 号票）、三类首页指标（P1，32 号票）。F1 已由 11 号票交付；跨资源的下载授权（材料、运行产物、提交附件）由 2/3/9 号在各自接口内完成。前端图形界面的登录跳转与刷新恢复需人工点验，自动化只覆盖构建与接口。
+不含：三类首页指标（P1，32 号票）。F1 已由 11 号票交付，U3/U4 已由 10 号票交付；跨资源的下载授权（材料、运行产物、提交附件）由 2/3/9 号在各自接口内完成。前端图形界面的登录跳转、刷新恢复与管理页操作需人工点验，自动化只覆盖构建与接口。
