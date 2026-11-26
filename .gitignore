@@ -12,6 +12,7 @@ node_modules
 dist/
 .env
 !.env.example
+/var/
 *.pyc
 __pycache__/
 *.egg-info/
