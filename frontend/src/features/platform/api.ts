@@ -74,3 +74,59 @@ export function fetchMembers(
   const query = relation ? `?relation=${encodeURIComponent(relation)}` : "";
   return request<{ items: Member[] }>(`/classes/${encodeURIComponent(classId)}/members${query}`);
 }
+
+/** U3：管理端账号条目。服务端不回传 password_hash。 */
+export type AdminUser = {
+  user_id: string;
+  login: string;
+  display_name: string;
+  role_id: string;
+  enabled: boolean;
+};
+
+/** U4：角色与权限码。 */
+export type AdminRole = {
+  role_id: string;
+  name: string;
+  permissions: string[];
+};
+
+export type NewUser = {
+  login: string;
+  display_name: string;
+  password: string;
+  role_id: string;
+};
+
+export type UserPatch = Partial<Pick<AdminUser, "display_name" | "role_id" | "enabled">>;
+export type RolePatch = Partial<Pick<AdminRole, "name" | "permissions">>;
+
+export function listUsers(): Promise<{ items: AdminUser[] }> {
+  return request<{ items: AdminUser[] }>("/admin/users");
+}
+
+export function createUser(body: NewUser): Promise<AdminUser> {
+  return request<AdminUser>("/admin/users", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateUser(userId: string, body: UserPatch): Promise<AdminUser> {
+  return request<AdminUser>(`/admin/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function listRoles(): Promise<{ items: AdminRole[] }> {
+  return request<{ items: AdminRole[] }>("/admin/roles");
+}
+
+export function createRole(body: AdminRole): Promise<AdminRole> {
+  return request<AdminRole>("/admin/roles", { method: "POST", body: JSON.stringify(body) });
+}
+
+export function updateRole(roleId: string, body: RolePatch): Promise<AdminRole> {
+  return request<AdminRole>(`/admin/roles/${encodeURIComponent(roleId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
